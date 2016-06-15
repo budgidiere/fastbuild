@@ -657,6 +657,7 @@ bool ObjectNode::ProcessIncludesWithPreProcessor( Job * job )
 	NODE_LOAD( AStackString<>,	compilerArgs );
 	NODE_LOAD( AStackString<>,  compilerArgsDeoptimized )
 	NODE_LOAD( AStackString<>,	objExtensionOverride );
+	NODE_LOAD(AStackString<>, objNameOverride);		//@KS: Added Object FileName Override
 	NODE_LOAD_DEPS( 0,			compilerForceUsing );
 	NODE_LOAD( bool,			deoptimizeWritableFiles );
 	NODE_LOAD( bool,			deoptimizeWritableFilesWithToken );
@@ -685,6 +686,7 @@ bool ObjectNode::ProcessIncludesWithPreProcessor( Job * job )
 	ObjectNode * objNode = on->CastTo< ObjectNode >();
 	objNode->m_DynamicDependencies.Swap( dynamicDeps );
 	objNode->m_ObjExtensionOverride = objExtensionOverride;
+	objNode->m_ObjNameOverride = objNameOverride;		//@KS: Added Object FileName Override
 
 	return objNode;
 }
@@ -697,10 +699,18 @@ bool ObjectNode::ProcessIncludesWithPreProcessor( Job * job )
 	NODE_LOAD( AStackString<>,	sourceFile );
 	NODE_LOAD( uint32_t,		flags );
 	NODE_LOAD( AStackString<>,	compilerArgs );
+	NODE_LOAD(AStackString<>, objNameOverride);		//@KS: Added Object FileName Override
 
 	NodeProxy * srcFile = FNEW( NodeProxy( sourceFile ) );
 
-	return FNEW( ObjectNode( name, srcFile, compilerArgs, flags ) );
+	//@KS: >>> Added Object FileName Override
+	Node* pNewNode = FNEW(ObjectNode(name, srcFile, compilerArgs, flags));
+
+	ObjectNode * objNode = pNewNode->CastTo< ObjectNode >();
+	objNode->m_ObjNameOverride = objNameOverride;
+
+	return pNewNode;
+	//@KS: <<<
 }
 
 // DetermineFlags
@@ -863,6 +873,7 @@ bool ObjectNode::ProcessIncludesWithPreProcessor( Job * job )
 	NODE_SAVE( m_CompilerArgs );
 	NODE_SAVE( m_CompilerArgsDeoptimized );
 	NODE_SAVE( m_ObjExtensionOverride );
+	NODE_SAVE(m_ObjNameOverride);	//@KS: Added Object FileName Override
 	NODE_SAVE_DEPS( m_CompilerForceUsing );
 	NODE_SAVE( m_DeoptimizeWritableFiles );
 	NODE_SAVE( m_DeoptimizeWritableFilesWithToken );
@@ -897,6 +908,8 @@ bool ObjectNode::ProcessIncludesWithPreProcessor( Job * job )
 	{
 		NODE_SAVE( m_CompilerArgs );
 	}
+
+	NODE_SAVE(m_ObjNameOverride);		//@KS: Added Object FileName Override
 }
 
 // GetPDBName
@@ -1367,8 +1380,17 @@ bool ObjectNode::BuildArgs( const Job * job, Args & fullArgs, Pass pass, bool us
 			{
 				// handle /Option:%3 -> /Option:A
 				fullArgs += AStackString<>( token.Get(), found );
-				fullArgs += m_Name;
-				fullArgs += GetObjExtension(); // convert 'PrecompiledHeader.pch' to 'PrecompiledHeader.pch.obj'
+				//@KS: >>> Added Object FileName Override
+				if (m_ObjNameOverride.IsEmpty())
+				{
+					fullArgs += m_Name;
+					fullArgs += GetObjExtension(); // convert 'PrecompiledHeader.pch' to 'PrecompiledHeader.pch.obj'
+				}
+				else
+				{
+					fullArgs += m_ObjNameOverride;
+				}
+				//@KS: <<<
 				fullArgs += AStackString<>( found + 2, token.GetEnd() );
 				fullArgs.AddDelimiter();
 				continue;

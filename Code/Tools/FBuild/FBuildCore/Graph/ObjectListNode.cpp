@@ -283,8 +283,17 @@ void ObjectListNode::GetInputFiles( Args & fullArgs, const AString & pre, const 
 				if ( on->IsMSVC() )
 				{
 					fullArgs += pre;
-					fullArgs += on->GetName();
-					fullArgs += on->GetObjExtension();
+					//@KS: >>> Added Object FileName Override
+					if (on->GetObjNameOverride().IsEmpty()) 
+					{
+						fullArgs += on->GetName();
+						fullArgs += on->GetObjExtension();
+					}
+					else
+					{
+						fullArgs += on->GetObjNameOverride();
+					}
+					//@KS: <<<
 					fullArgs += post;
 					fullArgs.AddDelimiter();
 					continue;
@@ -310,7 +319,16 @@ void ObjectListNode::GetInputFiles( Args & fullArgs, const AString & pre, const 
 
 		// normal object
 		fullArgs += pre;
-		fullArgs += n->GetName();
+		//@KS: >>> Added Object FileName Override
+		if (m_ObjNameOverride.IsEmpty())
+		{
+			fullArgs += n->GetName();
+		}
+		else
+		{
+			fullArgs += m_ObjNameOverride;
+		}
+		//@KS: <<<
 		fullArgs += post;
 		fullArgs.AddDelimiter();
 	}
@@ -360,12 +378,22 @@ bool ObjectListNode::CreateDynamicObjectNode( Node * inputFile, const DirectoryL
         }
     }
 
-	AStackString<> fileNameOnly( lastSlash, lastDot );
-	AStackString<> objFile( m_CompilerOutputPath );
-    objFile += subPath;
-    objFile += m_CompilerOutputPrefix;
-	objFile += fileNameOnly;
-	objFile += GetObjExtension();
+	//@KS: >>> Added Object FileName Override
+	AStackString<> objFile;
+	if (m_ObjNameOverride.IsEmpty())
+	{
+		AStackString<> fileNameOnly(lastSlash, lastDot);
+		objFile += m_CompilerOutputPath;
+		objFile += subPath;
+		objFile += m_CompilerOutputPrefix;
+		objFile += fileNameOnly;
+		objFile += GetObjExtension();
+	}
+	else
+	{
+		objFile += m_ObjNameOverride;
+	}
+	//@KS: <<<
 
 	// Create an ObjectNode to compile the above file
 	// and depend on that
@@ -429,6 +457,7 @@ bool ObjectListNode::CreateDynamicObjectNode( Node * inputFile, const DirectoryL
 	NODE_LOAD_DEPS( 16,			staticDeps );
 	NODE_LOAD_NODE( Node,		precompiledHeader );
 	NODE_LOAD( AStackString<>,	objExtensionOverride );
+	NODE_LOAD(AStackString<>, objNameOverride); //@KS: Added Object FileName Override
     NODE_LOAD( AStackString<>,	compilerOutputPrefix );
 	NODE_LOAD_DEPS( 0,			compilerForceUsing );
 	NODE_LOAD_DEPS( 0,			preBuildDependencies );
@@ -456,6 +485,7 @@ bool ObjectListNode::CreateDynamicObjectNode( Node * inputFile, const DirectoryL
 								preprocessorNode,
 								preprocessorArgs );
 	n->m_ObjExtensionOverride = objExtensionOverride;
+	n->m_ObjNameOverride = objNameOverride;		//@KS: Added Object FileName Override
     n->m_CompilerOutputPrefix = compilerOutputPrefix;
 
 	// TODO:B Need to save the dynamic deps, for better progress estimates
@@ -481,6 +511,7 @@ bool ObjectListNode::CreateDynamicObjectNode( Node * inputFile, const DirectoryL
 	NODE_SAVE_DEPS( m_StaticDependencies );
 	NODE_SAVE_NODE( m_PrecompiledHeader );
 	NODE_SAVE( m_ObjExtensionOverride );
+	NODE_SAVE(m_ObjNameOverride);	//@KS: Added Object FileName Override
     NODE_SAVE( m_CompilerOutputPrefix );
 	NODE_SAVE_DEPS( m_CompilerForceUsing );
 	NODE_SAVE_DEPS( m_PreBuildDependencies );

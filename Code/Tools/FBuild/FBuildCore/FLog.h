@@ -28,6 +28,14 @@
 	} while ( false );								\
 	PRAGMA_DISABLE_POP_MSVC
 
+//@KS: BuildMonitor
+#define FLOG_VS( fmtString, ... )				\
+	do {											\
+	FLog::VS( fmtString, ##__VA_ARGS__ );		\
+	PRAGMA_DISABLE_PUSH_MSVC(4127)					\
+	} while ( false );								\
+	PRAGMA_DISABLE_POP_MSVC
+
 #define FLOG_BUILD_DIRECT( message )			    \
 	do {											\
 		FLog::BuildDirect( message );               \
@@ -66,6 +74,7 @@ public:
 
 	static void Info( const char * formatString, ... );
 	static void Build( const char * formatString, ... );
+	static void VS(const char * formatString, ...);	//@KS: BuildMonitor
 	static void Warning( const char * formatString, ... );
 	static void Error( const char * formatString, ... );
 

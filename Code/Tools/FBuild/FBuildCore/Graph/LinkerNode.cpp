@@ -262,6 +262,24 @@ bool LinkerNode::BuildArgs( Args & fullArgs ) const
 	Array< AString > tokens( 1024, true );
 	m_LinkerArgs.Tokenize( tokens );
 
+	//@KS: >>> (MSVC: Allow passing linker input files through a Response file)
+	bool bResponseFileProvided = false;
+	if (GetFlag(LINK_FLAG_MSVC))
+	{
+		const AString * const end = tokens.End();
+		for (const AString * it = tokens.Begin(); it != end; ++it)
+		{
+			const AString & token = *it;
+
+			if (token.Find("@"))
+			{
+				bResponseFileProvided = true;
+				break;
+			}
+		}
+	}
+	//@KS: <<<
+
 	const AString * const end = tokens.End();
 	for ( const AString * it = tokens.Begin(); it!=end; ++it )
 	{
@@ -271,9 +289,12 @@ bool LinkerNode::BuildArgs( Args & fullArgs ) const
 		const char * found = token.Find( "%1" );
 		if ( found )
 		{
-			AStackString<> pre( token.Get(), found );
-			AStackString<> post( found + 2, token.GetEnd() );
-			GetInputFiles( fullArgs, pre, post );
+			if (!bResponseFileProvided) //@KS: MSVC Response files
+			{
+				AStackString<> pre(token.Get(), found);
+				AStackString<> post(found + 2, token.GetEnd());
+				GetInputFiles(fullArgs, pre, post);
+			}
 			fullArgs.AddDelimiter();
 			continue;
 		}

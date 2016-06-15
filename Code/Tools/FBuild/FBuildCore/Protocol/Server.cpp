@@ -599,6 +599,10 @@ void Server::FinalizeCompletedJobs()
 {
 	PROFILE_FUNCTION
 
+	//@KS: Fix Timeout on WIFI due to file transfer delay
+	Timer localTimer;
+	localTimer.Start();
+
 	JobQueueRemote & jcr = JobQueueRemote::Get();
 	while ( Job * job = jcr.GetCompletedJob() )
 	{
@@ -639,6 +643,12 @@ void Server::FinalizeCompletedJobs()
 		}
 
 		FDELETE job;
+
+		//@KS: Fix Timeout on WIFI due to file transfer delay
+		if (localTimer.GetElapsedMS() > Protocol::SERVER_STATUS_FREQUENCY_MS)
+		{
+			break;
+		}
 	}
 }
 

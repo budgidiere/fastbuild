@@ -299,7 +299,8 @@ void LibraryNode::EmitCompilationMessage( const Args & fullArgs ) const
 	NODE_LOAD( AStackString<>,	compilerOutputPath );
 	NODE_LOAD_DEPS( 16,			staticDeps );
 	NODE_LOAD_NODE( Node,		precompiledHeader );
-	NODE_LOAD( AStackString<>,	objExtensionOverride );
+	NODE_LOAD( AStackString<>,	objExtensionOverride );	
+	NODE_LOAD(AStackString<>,	objNameOverride);	//@KS: Added Object FileName Override
     NODE_LOAD( AStackString<>,	compilerOutputPrefix );
 	NODE_LOAD_DEPS( 0,			compilerForceUsing );
 	NODE_LOAD_DEPS( 0,			preBuildDependencies );
@@ -336,6 +337,7 @@ void LibraryNode::EmitCompilationMessage( const Args & fullArgs ) const
 								 preprocessorNode,
 								 preprocessorArgs );
 	n->m_ObjExtensionOverride = objExtensionOverride;
+	n->m_ObjNameOverride = objNameOverride;		//@KS: Added Object FileName Override
     n->m_CompilerOutputPrefix = compilerOutputPrefix;
 
 	// TODO:B Need to save the dynamic deps, for better progress estimates

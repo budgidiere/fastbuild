@@ -93,6 +93,33 @@ void JobQueueRemote::GetWorkerStatus( size_t index, AString & hostName, AString 
 	( (WorkerThreadRemote *)m_Workers[ index ] )->GetStatus( hostName, status, isIdle );
 }
 
+// @KS: JobQueue status
+//------------------------------------------------------------------------------
+void JobQueueRemote::GetQueueStatus(AString & status)
+{
+	size_t pendingJobs = 0;
+	{
+		MutexHolder m(m_PendingJobsMutex);
+		pendingJobs = m_PendingJobs.GetSize();
+	}
+
+	size_t inFlightJobs = 0;
+	{
+		MutexHolder m(m_InFlightJobsMutex);
+		inFlightJobs = m_InFlightJobs.GetSize();
+	}
+
+	size_t completedJobs = 0;
+	size_t failedJobs = 0;
+	{
+		MutexHolder m(m_CompletedJobsMutex);
+		completedJobs = m_CompletedJobs.GetSize();
+		failedJobs = m_CompletedJobsFailed.GetSize();
+	}
+
+	status.Format("| %d wait | %d proc | %d done | %d fail", pendingJobs, inFlightJobs, completedJobs, failedJobs);
+}
+
 // MainThreadWait
 //------------------------------------------------------------------------------
 void JobQueueRemote::MainThreadWait( uint32_t timeoutMS )
@@ -280,6 +307,14 @@ void JobQueueRemote::FinishedProcessingJob( Job * job, bool success )
 
 	ObjectNode * node = job->GetNode()->CastTo< ObjectNode >();
 
+	//@KS: BuildMonitor
+	bool bStartedVSLog = false;
+	if (node->GetType() == Node::OBJECT_NODE || node->GetType() == Node::EXE_NODE || node->GetType() == Node::LIBRARY_NODE)
+	{
+		bStartedVSLog = true;
+		FLOG_VS("START_JOB local \"%s\" \n", job->GetNode()->GetName().Get());
+	}
+
 	// remote tasks must output to a tmp file
 	if ( job->IsLocal() == false )
 	{
@@ -386,6 +421,19 @@ void JobQueueRemote::FinishedProcessingJob( Job * job, bool success )
 	// log processing time
 	node->AddProcessingTime( timeTakenMS );
 	
+	//@KS: BuildMonitor
+	if (bStartedVSLog)
+	{
+		if (result == Node::NODE_RESULT_FAILED)
+		{
+			FLOG_VS("FINISH_JOB ERROR local \"%s\" \n", job->GetNode()->GetName().Get());
+		}
+		else
+		{
+			FLOG_VS("FINISH_JOB SUCCESS local \"%s\" \n", job->GetNode()->GetName().Get());
+		}
+	}
+
 	return result;
 }
 

@@ -93,6 +93,12 @@ public:
 	void GetPDBName( AString & pdbName ) const;
 
 	const char * GetObjExtension() const;
+
+	//@KS: >>> Added Object FileName Override
+	const AString & GetObjNameOverride() const { return m_ObjNameOverride; }
+	void SetObjNameOverride(const AString & objNameOverride) { m_ObjNameOverride = objNameOverride; }
+	//@KS: <<<
+
 private:
 	virtual bool DoDynamicDependencies( bool forceClean ) override;
 	virtual BuildResult DoBuild( Job * job ) override;
@@ -174,6 +180,7 @@ private:
 	AString m_CompilerArgs;
 	AString m_CompilerArgsDeoptimized;
 	AString m_ObjExtensionOverride;
+	AString m_ObjNameOverride;		//@KS: Added Object FileName Override
 	Dependencies m_CompilerForceUsing;
 	bool m_DeoptimizeWritableFiles;
 	bool m_DeoptimizeWritableFilesWithToken;

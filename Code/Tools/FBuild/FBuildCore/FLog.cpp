@@ -13,6 +13,9 @@
 #include "Core/Env/Types.h"
 #include "Core/Profile/Profile.h"
 #include "Core/Tracing/Tracing.h"
+//@KS: BuildMonitor
+#include "Core/FileIO/FileStream.h"
+#include "Core/Process/Mutex.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -29,6 +32,11 @@
         sprintf( buffer, "%i", value );
     }
 #endif
+
+//@KS: BuildMonitor
+Mutex fsMutex;
+FileStream* fs = NULL;
+Timer _timer;
 
 // Static Data
 //------------------------------------------------------------------------------
@@ -66,6 +74,29 @@ static AStackString< 64 > g_OutputString( "\r99.9 % [....................] " );
 	Tracing::Output( buffer.Get() );
 }
 
+// @KS: Build Monitor Events
+//------------------------------------------------------------------------------
+/*static*/ void FLog::VS(const char * formatString, ...)
+{
+	MutexHolder lock(fsMutex);
+
+	AStackString< 8192 > buffer;
+
+	va_list args;
+	va_start(args, formatString);
+	buffer.VFormat(formatString, args);
+	va_end(args);
+
+	AString finalBuffer;
+
+	finalBuffer.Format("%lld %s", (long long)_timer.GetElapsedMS(), buffer.Get());
+
+	if (fs && fs->IsOpen())
+	{
+		fs->WriteBuffer(finalBuffer.Get(), finalBuffer.GetLength());
+		fs->Flush();
+	}
+}
 // BuildDirect
 //------------------------------------------------------------------------------
 /*static*/ void FLog::BuildDirect( const char * message )
@@ -148,6 +179,34 @@ static AStackString< 64 > g_OutputString( "\r99.9 % [....................] " );
 //------------------------------------------------------------------------------
 /*static*/ void FLog::StartBuild()
 {
+	//@KS: >>> Build Monitor
+	MutexHolder lock(fsMutex);
+
+	AStackString<> fullPath;
+	FileIO::GetTempDir(fullPath);
+
+	fullPath += "FastBuild/FastBuildLog.log";
+
+	if (fs)
+	{
+		if (fs->IsOpen())
+		{
+			fs->Close();
+		}
+		delete fs;
+	}
+
+	fs = new FileStream();
+
+	if (fs->Open(fullPath.Get(), FileStream::READ_WRITE) == false)
+	{
+		delete fs;
+		fs = nullptr;
+	}
+
+	VS("START_BUILD\n");
+	//@KS: <<<
+
 //	if ( s_ShowProgress )
 	{
 		Tracing::SetCallbackOutput( &TracingOutputCallback );
@@ -158,6 +217,23 @@ static AStackString< 64 > g_OutputString( "\r99.9 % [....................] " );
 //------------------------------------------------------------------------------
 /*static*/ void FLog::StopBuild()
 {
+	//@KS: >>> Build Monitor
+	MutexHolder lock(fsMutex);
+
+	if (fs)
+	{
+		if (fs->IsOpen())
+		{
+			VS("STOP_BUILD\n");
+
+			fs->Close();
+		}
+		delete fs;
+
+		fs = NULL;
+	}
+	//@KS: <<<
+
 	if ( s_ShowProgress )
 	{
 		Tracing::SetCallbackOutput( nullptr );

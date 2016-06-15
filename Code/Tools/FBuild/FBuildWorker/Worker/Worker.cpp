@@ -258,6 +258,15 @@ void Worker::UpdateUI()
 			status += " (Low Disk Space)";
 		}
 	#endif	
+
+	{
+		//@KS: JobQueue status
+		JobQueueRemote & jqr = JobQueueRemote::Get();
+		AStackString<> jobQueueStatus;
+		jqr.GetQueueStatus(jobQueueStatus);
+		status += jobQueueStatus;
+	}
+
 	if ( InConsoleMode() )
 	{
         status += '\n';
@@ -267,7 +276,6 @@ void Worker::UpdateUI()
 	{
         m_MainWindow->SetStatus( status.Get() );
 	}
-
 
 	if ( InConsoleMode() == false )
 	{
