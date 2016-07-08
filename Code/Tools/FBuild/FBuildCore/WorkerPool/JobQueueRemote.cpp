@@ -117,7 +117,7 @@ void JobQueueRemote::GetQueueStatus(AString & status)
 		failedJobs = m_CompletedJobsFailed.GetSize();
 	}
 
-	status.Format("| %d wait | %d proc | %d done | %d fail", pendingJobs, inFlightJobs, completedJobs, failedJobs);
+	status.Format(" | %d wait | %d proc | %d done | %d fail", pendingJobs, inFlightJobs, completedJobs, failedJobs);
 }
 
 // MainThreadWait
