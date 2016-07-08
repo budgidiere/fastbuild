@@ -38,12 +38,14 @@ public:
 	// access to info about this connection
 	TCPConnectionPool & GetTCPConnectionPool() const { return *m_TCPConnectionPool; }
 	inline uint32_t GetRemoteAddress() const { return m_RemoteAddress; }
+	inline const char* GetRemoteName() const { return m_RemoteName; }
 
 private:
 	friend class TCPConnectionPool;
 
 	TCPSocket				m_Socket;
 	uint32_t				m_RemoteAddress;
+	char					m_RemoteName[NI_MAXHOST];
 	uint16_t				m_RemotePort;
 	volatile mutable bool	m_ThreadQuitNotification;
 	TCPConnectionPool *		m_TCPConnectionPool; // back pointer to parent pool
@@ -77,7 +79,7 @@ public:
 	size_t GetNumConnections() const;
 
     // transmit data
-	bool Send(const ConnectionInfo * connection, const void * data, size_t size, uint32_t timeoutMS = 20000);	//@KS: Increased Timeout threshold
+	bool Send(const ConnectionInfo * connection, const void * data, size_t size, uint32_t timeoutMS = 2000000);	//@KS: Increased Timeout threshold
     bool Broadcast( const void * data, size_t size );
 
 	static void GetAddressAsString( uint32_t addr, AString & address );

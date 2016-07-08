@@ -76,17 +76,14 @@ Client::~Client()
 	if ( ss->m_Jobs.IsEmpty() == false )
 	{
 		//@KS: BuildMonitor
-		AStackString<> address; // TODO:B the host name would be better
-		TCPConnectionPool::GetAddressAsString(connection->GetRemoteAddress(), address);
-
 		Job ** it = ss->m_Jobs.Begin();
 		const Job * const * end = ss->m_Jobs.End();
 		while ( it != end )
 		{
 			//@KS: BuildMonitor
 			Job* job = *it;
-			FLOG_BUILD("-> Problem: %s <REMOTE: %s>\n", job->GetNode()->GetName().Get(), address.Get());
-			FLOG_VS("FINISH_JOB TIMEOUT %s \"%s\" \n", address.Get(), job->GetNode()->GetName().Get());
+			FLOG_BUILD("-> Problem: %s <REMOTE: %s>\n", job->GetNode()->GetName().Get(), connection->GetRemoteName());
+			FLOG_VS("FINISH_JOB TIMEOUT %s \"%s\" \n", connection->GetRemoteName(), job->GetNode()->GetName().Get());
 
 			JobQueue::Get().ReturnUnfinishedDistributableJob( *it );
 			++it;
@@ -453,11 +450,9 @@ void Client::Process( const ConnectionInfo * connection, const Protocol::MsgRequ
 	ASSERT( toolId );
 
 	// output to signify remote start
-	AStackString<> address; // TODO:B the host name would be better
-	TCPConnectionPool::GetAddressAsString( connection->GetRemoteAddress(), address );
-	FLOG_BUILD( "-> Obj: %s <REMOTE: %s>\n", job->GetNode()->GetName().Get(), address.Get() );
+	FLOG_BUILD( "-> Obj: %s <REMOTE: %s>\n", job->GetNode()->GetName().Get(), connection->GetRemoteName());
 	//@KS: BuildMonitor
-	FLOG_VS("START_JOB %s \"%s\" \n", address.Get(), job->GetNode()->GetName().Get());
+	FLOG_VS("START_JOB %s \"%s\" \n", connection->GetRemoteName(), job->GetNode()->GetName().Get());
 
     {
         PROFILE_SECTION( "SendJob" )
@@ -649,16 +644,13 @@ void Client::Process( const ConnectionInfo * connection, const Protocol::MsgJobR
 	}
 
 	//@KS: BuildMonitor
-	AStackString<> address; // TODO:B the host name would be better
-	TCPConnectionPool::GetAddressAsString(connection->GetRemoteAddress(), address);
-
 	if (result)
 	{
-		FLOG_VS("FINISH_JOB SUCCESS %s \"%s\" \n", address.Get(), job->GetNode()->GetName().Get());
+		FLOG_VS("FINISH_JOB SUCCESS %s \"%s\" \n", connection->GetRemoteName(), job->GetNode()->GetName().Get());
 	}
 	else
 	{
-		FLOG_VS("FINISH_JOB ERROR %s \"%s\" \n", address.Get(), job->GetNode()->GetName().Get());
+		FLOG_VS("FINISH_JOB ERROR %s \"%s\" \n", connection->GetRemoteName(), job->GetNode()->GetName().Get());
 	}
 
 	JobQueue::Get().FinishedProcessingJob( job, result, true, false ); // remote job, not a race of a remote job

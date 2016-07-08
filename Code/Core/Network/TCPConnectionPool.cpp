@@ -19,6 +19,7 @@
 // System
 #if defined( __WINDOWS__ )
     #include <winsock2.h>
+	#include <ws2tcpip.h>
     #include <windows.h>
 #elif defined( __APPLE__ ) || defined( __LINUX__ )
     #include <string.h>
@@ -835,11 +836,28 @@ ConnectionInfo * TCPConnectionPool::CreateConnectionThread( TCPSocket socket, ui
 {
 	MutexHolder mh( m_ConnectionsMutex );
 
+
+
+	//-----------------------------------------
+	// Call getnameinfo
+
 	ConnectionInfo * ci = FNEW( ConnectionInfo( this ) );
 	ci->m_Socket = socket;
 	ci->m_RemoteAddress = host;
 	ci->m_RemotePort = port;
 	ci->m_ThreadQuitNotification = false;
+
+	//@KS: Resolve the name of the remote machine
+	struct sockaddr_in saGNI;
+	saGNI.sin_family = AF_INET;
+	saGNI.sin_addr.s_addr = host;
+	saGNI.sin_port = htons(port);
+
+	getnameinfo((struct sockaddr *) &saGNI,
+		sizeof(struct sockaddr),
+		ci->m_RemoteName,
+		NI_MAXHOST, NULL, 0, NI_NUMERICSERV);
+
 
     #ifdef TCPCONNECTION_DEBUG
         AStackString<32> addr;

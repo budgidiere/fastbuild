@@ -539,7 +539,7 @@ void JobQueue::FinishedProcessingJob( Job * job, bool success, bool wasARemoteJo
 
 	//@KS: BuildMonitor
 	bool bStartedVSLog = false;
-	if (node->GetType() == Node::OBJECT_NODE || node->GetType() == Node::EXE_NODE || node->GetType() == Node::LIBRARY_NODE)
+	if (node->GetType() == Node::OBJECT_NODE || node->GetType() == Node::EXE_NODE || node->GetType() == Node::LIBRARY_NODE || node->GetType() == Node::DLL_NODE || node->GetType() == Node::CS_NODE)
 	{
 		bStartedVSLog = true;
 		FLOG_VS("START_JOB local \"%s\" \n", job->GetNode()->GetName().Get());
