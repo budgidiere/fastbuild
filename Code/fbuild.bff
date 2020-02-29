@@ -1,4 +1,4 @@
-; FBuild 
+; FBuild
 ;-------------------------------------------------------------------------------
 
 ;-------------------------------------------------------------------------------
@@ -138,7 +138,7 @@ Compiler( 'Compiler-x64-OSX' )
 
 // X86
 //------------------------------------------------------------------------------
-.X86BaseConfig = 
+.X86BaseConfig =
 [
 	Using( .MSVCBaseConfig )
 	.ToolsBasePath			= '$VSBasePath$\VC\bin'
@@ -177,8 +177,8 @@ Compiler( 'Compiler-x64-OSX' )
 	.CompilerOptionsDeoptimized		= '$CompilerOptions$ /Od'
 	.PCHOptionsDeoptimized			= '$PCHOptions$ /Od'
 
-	.CompilerOptions        + .CompilerReleaseOptimizations							
-	.PCHOptions             + .CompilerReleaseOptimizations							
+	.CompilerOptions        + .CompilerReleaseOptimizations
+	.PCHOptions             + .CompilerReleaseOptimizations
 	.LibrarianOptions		+ .LibrarianReleaseOptimizations
 	.LinkerOptions			+ .LinkerReleaseOptimizations
 ]
@@ -194,7 +194,7 @@ Compiler( 'Compiler-x64-OSX' )
 
 // X64
 //------------------------------------------------------------------------------
-.X64BaseConfig = 
+.X64BaseConfig =
 [
 	Using( .MSVCBaseConfig )
 	.ToolsBasePath			= '$VSBasePath$\VC\bin\x86_amd64'
@@ -212,9 +212,9 @@ Compiler( 'Compiler-x64-OSX' )
 	Using( .X64BaseConfig )
 	.Config					= 'Debug'
 	.CompilerOptions		+ ' /DDEBUG /DPROFILING_ENABLED'
-							+ .CompilerDebugOptimizations							
+							+ .CompilerDebugOptimizations
 	.PCHOptions				+ ' /DDEBUG /DPROFILING_ENABLED'
-							+ .CompilerDebugOptimizations							
+							+ .CompilerDebugOptimizations
 	.LibrarianOptions		+ .LibrarianDebugOptimizations
 	.LinkerOptions			+ .LinkerDebugOptimizations
 ]
@@ -230,8 +230,8 @@ Compiler( 'Compiler-x64-OSX' )
 	.CompilerOptionsDeoptimized		= '$CompilerOptions$ /Od'
 	.PCHOptionsDeoptimized			= '$PCHOptions$ /Od'
 
-	.CompilerOptions        + .CompilerReleaseOptimizations							
-	.PCHOptions             + .CompilerReleaseOptimizations							
+	.CompilerOptions        + .CompilerReleaseOptimizations
+	.PCHOptions             + .CompilerReleaseOptimizations
 	.LibrarianOptions		+ .LibrarianReleaseOptimizations
 	.LinkerOptions			+ .LinkerReleaseOptimizations
 ]
@@ -247,12 +247,12 @@ Compiler( 'Compiler-x64-OSX' )
 
 // X86 Clang
 //------------------------------------------------------------------------------
-.X86ClangConfig = 
+.X86ClangConfig =
 [
 	.ToolsBasePath			= '$ClangBasePath$'
 	.Compiler				= 'Compiler-x86Clang'
 	.Librarian				= '$ToolsBasePath$\bin\llvm-ar.exe'
-	.Linker					= '$VSBasePath$\VC\bin\link.exe' //'$ToolsBasePath$\lld.exe'								
+	.Linker					= '$VSBasePath$\VC\bin\link.exe' //'$ToolsBasePath$\lld.exe'
 
 	.WindowsLibPaths		= '$WindowsSDKBasePath$/lib/winv6.3/um'
 
@@ -323,35 +323,35 @@ Compiler( 'Compiler-x64-OSX' )
     .Compiler               = 'Compiler-x64-Linux'
     .Librarian              = '/usr/bin/ar'
     .Linker                 = '/usr/bin/g++'
-    
+
     .BaseCompilerOptions    = '-o "%2" "%1" -c -g'
                             + ' -I./'
                             + ' -D__LINUX__'
                             + ' -Wall -Werror -Wfatal-errors'                    // warnings as errors
                             + ' -m64'                           // x86-64
-                            
+
     .CompilerOptionsC       = .BaseCompilerOptions
     .CompilerOptions        = .BaseCompilerOptions
                             + ' -std=c++11'                     // allow C++11 features
-                            
+
                             // Disabled warnings
                             + ' -Wno-invalid-offsetof' // we get the offset of members in non-POD types
-                            
+
     .LinkerOptions          = '"%1" -o "%2"'
-                                
+
     .LibrarianOptions       = 'rcs "%2" "%1"'
-    
+
     // Optimizations
     .CompilerDebugOptimizations     = ' -O0'
     .CompilerReleaseOptimizations   = ' -O3'
     .LibrarianDebugOptimizations    = ''
     .LibrarianReleaseOptimizations  = ''
     .LinkerDebugOptimizations       = ''
-    .LinkerReleaseOptimizations     = ''    
-    
-    .UseExceptions          = ' -fexceptions' 
+    .LinkerReleaseOptimizations     = ''
+
+    .UseExceptions          = ' -fexceptions'
 ]
-.X64BaseConfig_Linux = 
+.X64BaseConfig_Linux =
 [
     Using( .LinuxBaseConfig )
     .Platform               = 'x64Linux'
@@ -361,7 +361,7 @@ Compiler( 'Compiler-x64-OSX' )
     Using( .X64BaseConfig_Linux )
     .Config                 = 'Debug'
     .CompilerOptions        + ' -DDEBUG -DPROFILING_ENABLED'
-                            + .CompilerDebugOptimizations                           
+                            + .CompilerDebugOptimizations
     .LibrarianOptions       + .LibrarianDebugOptimizations
     .LinkerOptions          + .LinkerDebugOptimizations
 ]
@@ -397,7 +397,7 @@ Compiler( 'Compiler-x64-OSX' )
                             + ' -Wno-#pragma-messages'
                             + ' -std=c++11'                     // allow C++11 features
                             + ' -m64'                           // x86-64
-                            
+
     .CompilerOutputExtension= '.o'
     .LinkerOptions          = '"%1" -o "%2" -g'
 
@@ -453,7 +453,7 @@ Compiler( 'Compiler-x64-OSX' )
 ]
 
 //------------------------------------------------------------------------------
-// 
+//
 //------------------------------------------------------------------------------
 .OutputBase	= '../tmp'
 
@@ -465,7 +465,7 @@ Compiler( 'Compiler-x64-OSX' )
 //------------------------------------------------------------------------------
 // VisualStudio Project Generation
 //------------------------------------------------------------------------------
-.ProjectCommon = 
+.ProjectCommon =
 [
 	.ProjectBuildCommand		= 'cd ^$(SolutionDir)\..\..\Code\ &amp; fbuild -vs -dist -cache ^$(ProjectName)-^$(Configuration)'
 	.ProjectRebuildCommand		= 'cd ^$(SolutionDir)\..\..\Code\ &amp; fbuild -vs -dist -cache -clean ^$(ProjectName)-^$(Configuration)'
@@ -683,22 +683,22 @@ VSSolution( 'solution' )
 	.SolutionDependencies = { .Deps }
 
     .Folder_0_External =
-	[ 
+	[
 		.Path			= '0. External'
         .Projects		= { 'LZ4-proj' }
     ]
     .Folder_1_Test =
-	[ 
+	[
 		.Path			= '1. Test'
         .Projects		= { 'CoreTest-proj', 'FBuildTest-proj', 'TestFramework-proj' }
     ]
     .Folder_2_Libs =
-	[ 
+	[
 		.Path			= '2. Libs'
         .Projects		= { 'Core-proj', 'FBuildCore-proj', 'OSUI-proj' }
     ]
     .Folder_3_Apps =
-	[ 
+	[
 		.Path			= '3. Apps'
         .Projects		= { 'FBuildApp-proj', 'FBuildWorker-proj' }
     ]
@@ -725,8 +725,8 @@ XCodeProject( 'xcode' )
 
 	.ProjectOSXDebug 		= [ .Config = 'Debug' 	.Target = 'all-x64OSX-Debug' ]
 	.ProjectOSXProfile 		= [ .Config = 'Profile' .Target = 'all-x64OSX-Profile' ]
-	.ProjectOSXRelease 		= [ .Config = 'Release' .Target = 'all-x64OSX-Release' ]		
-	.ProjectConfigs 		= { .ProjectOSXDebug, .ProjectOSXProfile, .ProjectOSXRelease }	
+	.ProjectOSXRelease 		= [ .Config = 'Release' .Target = 'all-x64OSX-Release' ]
+	.ProjectConfigs 		= { .ProjectOSXDebug, .ProjectOSXProfile, .ProjectOSXRelease }
 }
 
 //------------------------------------------------------------------------------
