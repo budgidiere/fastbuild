@@ -6,16 +6,16 @@
 #include "Tools/FBuild/FBuildCore/PrecompiledHeader.h"
 
 #include "FunctionObjectList.h"
-#include "Tools/FBuild/FBuildCore/FBuild.h"
-#include "Tools/FBuild/FBuildCore/FLog.h"
 #include "Tools/FBuild/FBuildCore/BFF/BFFIterator.h"
 #include "Tools/FBuild/FBuildCore/BFF/BFFParser.h"
 #include "Tools/FBuild/FBuildCore/BFF/BFFStackFrame.h"
 #include "Tools/FBuild/FBuildCore/BFF/BFFVariable.h"
-#include "Tools/FBuild/FBuildCore/Graph/NodeGraph.h"
+#include "Tools/FBuild/FBuildCore/FBuild.h"
+#include "Tools/FBuild/FBuildCore/FLog.h"
 #include "Tools/FBuild/FBuildCore/Graph/AliasNode.h"
 #include "Tools/FBuild/FBuildCore/Graph/CompilerNode.h"
 #include "Tools/FBuild/FBuildCore/Graph/DirectoryListNode.h"
+#include "Tools/FBuild/FBuildCore/Graph/NodeGraph.h"
 #include "Tools/FBuild/FBuildCore/Graph/ObjectListNode.h"
 #include "Tools/FBuild/FBuildCore/Graph/ObjectNode.h"
 
@@ -24,476 +24,445 @@
 
 // CONSTRUCTOR
 //------------------------------------------------------------------------------
-FunctionObjectList::FunctionObjectList()
-    : Function( "ObjectList" )
-{
-}
+FunctionObjectList::FunctionObjectList() : Function("ObjectList") {}
 
 // AcceptsHeader
 //------------------------------------------------------------------------------
-/*virtual*/ bool FunctionObjectList::AcceptsHeader() const
-{
-    return true;
-}
+/*virtual*/ bool FunctionObjectList::AcceptsHeader() const { return true; }
 
 // NeedsHeader
 //------------------------------------------------------------------------------
-/*virtual*/ bool FunctionObjectList::NeedsHeader() const
-{
-    return true;
-}
+/*virtual*/ bool FunctionObjectList::NeedsHeader() const { return true; }
 
 // Commit
 //------------------------------------------------------------------------------
-/*virtual*/ bool FunctionObjectList::Commit( const BFFIterator & funcStartIter ) const
-{
-    // make sure all required variables are defined
-    const BFFVariable * compiler;
-    const BFFVariable * compilerOptions;
-    AStackString<> compilerOptionsDeoptimized;
-    AStackString<> compilerOutputPath;
-    AStackString<> compilerOutputPrefix;
-    const BFFVariable * compilerOutputExtension;
-    const BFFVariable * compilerObjectNameOverride; // @KS: Added Object FileName Override
-    if ( !GetString( funcStartIter, compiler, ".Compiler", true ) ||
-            !GetString( funcStartIter, compilerOptions, ".CompilerOptions", true ) ||
-            !GetString( funcStartIter, compilerOptionsDeoptimized, ".CompilerOptionsDeoptimized", false ) ||
-            !GetString( funcStartIter, compilerOutputPath, ".CompilerOutputPath", true ) ||
-            !GetString( funcStartIter, compilerOutputPrefix, ".CompilerOutputPrefix", false ) ||
-            !GetString( funcStartIter, compilerOutputExtension, ".CompilerOutputExtension", false ) ||
-            !GetString( funcStartIter, compilerObjectNameOverride, ".CompilerObjectNameOverride", false ) )
-    {
+/*virtual*/ bool
+FunctionObjectList::Commit(const BFFIterator &funcStartIter) const {
+  // make sure all required variables are defined
+  const BFFVariable *compiler;
+  const BFFVariable *compilerOptions;
+  AStackString<> compilerOptionsDeoptimized;
+  AStackString<> compilerOutputPath;
+  AStackString<> compilerOutputPrefix;
+  const BFFVariable *compilerOutputExtension;
+  const BFFVariable
+      *compilerObjectNameOverride; // @KS: Added Object FileName Override
+  if (!GetString(funcStartIter, compiler, ".Compiler", true) ||
+      !GetString(funcStartIter, compilerOptions, ".CompilerOptions", true) ||
+      !GetString(funcStartIter, compilerOptionsDeoptimized,
+                 ".CompilerOptionsDeoptimized", false) ||
+      !GetString(funcStartIter, compilerOutputPath, ".CompilerOutputPath",
+                 true) ||
+      !GetString(funcStartIter, compilerOutputPrefix, ".CompilerOutputPrefix",
+                 false) ||
+      !GetString(funcStartIter, compilerOutputExtension,
+                 ".CompilerOutputExtension", false) ||
+      !GetString(funcStartIter, compilerObjectNameOverride,
+                 ".CompilerObjectNameOverride", false)) {
+    return false;
+  }
+
+  PathUtils::FixupFolderPath(compilerOutputPath);
+
+  NodeGraph &ng = FBuild::Get().GetDependencyGraph();
+
+  // find or create the compiler node
+  CompilerNode *compilerNode = nullptr;
+  if (!FunctionObjectList::GetCompilerNode(funcStartIter, compiler->GetString(),
+                                           compilerNode)) {
+    return false; // GetCompilerNode will have emitted error
+  }
+
+  // Compiler Force Using
+  Dependencies compilerForceUsing;
+  if (!GetNodeList(funcStartIter, ".CompilerForceUsing", compilerForceUsing,
+                   false)) {
+    return false; // GetNodeList will have emitted an error
+  }
+
+  // de-optimization setting
+  bool deoptimizeWritableFiles = false;
+  bool deoptimizeWritableFilesWithToken = false;
+  if (!GetBool(funcStartIter, deoptimizeWritableFiles,
+               ".DeoptimizeWritableFiles", false, false)) {
+    return false; // GetBool will have emitted error
+  }
+  if (!GetBool(funcStartIter, deoptimizeWritableFilesWithToken,
+               ".DeoptimizeWritableFilesWithToken", false, false)) {
+    return false; // GetBool will have emitted error
+  }
+  if ((deoptimizeWritableFiles || deoptimizeWritableFilesWithToken) &&
+      compilerOptionsDeoptimized.IsEmpty()) {
+    Error::Error_1101_MissingProperty(
+        funcStartIter, this, AStackString<>(".CompilerOptionsDeoptimized"));
+    return false;
+  }
+
+  // cache & distribution control
+  bool allowDistribution(true);
+  bool allowCaching(true);
+  if (!GetBool(funcStartIter, allowDistribution, ".AllowDistribution", true) ||
+      !GetBool(funcStartIter, allowCaching, ".AllowCaching", true)) {
+    return false; // GetBool will have emitted error
+  }
+
+  // Precompiled Header support
+  ObjectNode *precompiledHeaderNode = nullptr;
+  if (!GetPrecompiledHeaderNode(
+          funcStartIter, compilerNode, compilerOptions, compilerForceUsing,
+          precompiledHeaderNode, deoptimizeWritableFiles,
+          deoptimizeWritableFilesWithToken, allowDistribution, allowCaching)) {
+    return false; // GetPrecompiledHeaderNode will have emitted error
+  }
+
+  // Sanity check compile flags
+  const bool usingPCH = (precompiledHeaderNode != nullptr);
+  uint32_t objFlags = ObjectNode::DetermineFlags(
+      compilerNode, compilerOptions->GetString(), false, usingPCH);
+  if ((objFlags & ObjectNode::FLAG_MSVC) &&
+      (objFlags & ObjectNode::FLAG_CREATING_PCH)) {
+    // must not specify use of precompiled header (must use the PCH specific
+    // options)
+    Error::Error_1303_PCHCreateOptionOnlyAllowedOnPCH(funcStartIter, this,
+                                                      "/Yc", "CompilerOptions");
+    return false;
+  }
+
+  // Check input/output for Compiler
+  {
+    const AString &args = compilerOptions->GetString();
+    bool hasInputToken = (args.Find("%1") || args.Find("\"%1\""));
+    if (hasInputToken == false) {
+      Error::Error_1106_MissingRequiredToken(funcStartIter, this,
+                                             ".CompilerOptions", "%1");
+      return false;
+    }
+    bool hasOutputToken = (args.Find("%2") || args.Find("\"%2\""));
+    if (hasOutputToken == false) {
+      Error::Error_1106_MissingRequiredToken(funcStartIter, this,
+                                             ".CompilerOptions", "%2");
+      return false;
+    }
+
+    // check /c or -c
+    if (objFlags & ObjectNode::FLAG_MSVC) {
+      if (args.Find("/c") == nullptr && args.Find("-c") == nullptr) {
+        Error::Error_1106_MissingRequiredToken(funcStartIter, this,
+                                               ".CompilerOptions", "/c or -c");
         return false;
-    }
-
-    PathUtils::FixupFolderPath( compilerOutputPath );
-
-    NodeGraph & ng = FBuild::Get().GetDependencyGraph();
-
-    // find or create the compiler node
-    CompilerNode * compilerNode = nullptr;
-    if ( !FunctionObjectList::GetCompilerNode( funcStartIter, compiler->GetString(), compilerNode ) )
-    {
-        return false; // GetCompilerNode will have emitted error
-    }
-
-    // Compiler Force Using
-    Dependencies compilerForceUsing;
-    if ( !GetNodeList( funcStartIter, ".CompilerForceUsing", compilerForceUsing, false ) )
-    {
-        return false; // GetNodeList will have emitted an error
-    }
-
-    // de-optimization setting
-    bool deoptimizeWritableFiles = false;
-    bool deoptimizeWritableFilesWithToken = false;
-    if ( !GetBool( funcStartIter, deoptimizeWritableFiles, ".DeoptimizeWritableFiles", false, false ) )
-    {
-        return false; // GetBool will have emitted error
-    }
-    if ( !GetBool( funcStartIter, deoptimizeWritableFilesWithToken, ".DeoptimizeWritableFilesWithToken", false, false ) )
-    {
-        return false; // GetBool will have emitted error
-    }
-    if ( ( deoptimizeWritableFiles || deoptimizeWritableFilesWithToken ) && compilerOptionsDeoptimized.IsEmpty() )
-    {
-        Error::Error_1101_MissingProperty( funcStartIter, this, AStackString<>( ".CompilerOptionsDeoptimized" ) );
+      }
+    } else if (objFlags & (ObjectNode::FLAG_SNC | ObjectNode::FLAG_GCC |
+                           ObjectNode::FLAG_CLANG)) {
+      if (args.Find("-c") == nullptr) {
+        Error::Error_1106_MissingRequiredToken(funcStartIter, this,
+                                               ".CompilerOptions", "-c");
         return false;
+      }
+    }
+  }
+
+  // Get the (optional) Preprocessor & PreprocessorOptions
+  const BFFVariable *preprocessor = nullptr;
+  const BFFVariable *preprocessorOptions = nullptr;
+  CompilerNode *preprocessorNode = nullptr;
+  if (!GetString(funcStartIter, preprocessor, ".Preprocessor", false)) {
+    return false; // GetString will have emitted an error
+  }
+  if (preprocessor) {
+    // get the preprocessor executable
+    if (!FunctionObjectList::GetCompilerNode(
+            funcStartIter, preprocessor->GetString(), preprocessorNode)) {
+      return false; // GetCompilerNode will have emitted an error
     }
 
-    // cache & distribution control
-    bool allowDistribution( true );
-    bool allowCaching( true );
-    if ( !GetBool( funcStartIter, allowDistribution, ".AllowDistribution", true ) ||
-            !GetBool( funcStartIter, allowCaching, ".AllowCaching", true ) )
+    // get the command line args for the preprocessor
+    if (!GetString(funcStartIter, preprocessorOptions, ".PreprocessorOptions",
+                   true)) // required
     {
-        return false; // GetBool will have emitted error
+      return false; // GetString will have emitted an error
     }
+  }
 
-    // Precompiled Header support
-    ObjectNode * precompiledHeaderNode = nullptr;
-    if ( !GetPrecompiledHeaderNode( funcStartIter, compilerNode, compilerOptions, compilerForceUsing, precompiledHeaderNode, deoptimizeWritableFiles, deoptimizeWritableFilesWithToken, allowDistribution, allowCaching ) )
-    {
-        return false; // GetPrecompiledHeaderNode will have emitted error
-    }
+  // Pre-build dependencies
+  Dependencies preBuildDependencies;
+  if (!GetNodeList(funcStartIter, ".PreBuildDependencies", preBuildDependencies,
+                   false)) {
+    return false; // GetNodeList will have emitted an error
+  }
 
-    // Sanity check compile flags
-    const bool usingPCH = ( precompiledHeaderNode != nullptr );
-    uint32_t objFlags = ObjectNode::DetermineFlags( compilerNode, compilerOptions->GetString(), false, usingPCH );
-    if ( ( objFlags & ObjectNode::FLAG_MSVC ) && ( objFlags & ObjectNode::FLAG_CREATING_PCH ) )
-    {
-        // must not specify use of precompiled header (must use the PCH specific options)
-        Error::Error_1303_PCHCreateOptionOnlyAllowedOnPCH( funcStartIter, this, "/Yc", "CompilerOptions" );
-        return false;
-    }
+  Dependencies staticDeps(32, true);
+  if (!GetInputs(funcStartIter, staticDeps)) {
+    return false; // GetStaticDeps will gave emitted error
+  }
 
-    // Check input/output for Compiler
-    {
-        const AString & args = compilerOptions->GetString();
-        bool hasInputToken = ( args.Find( "%1" ) || args.Find( "\"%1\"" ) );
-        if ( hasInputToken == false )
-        {
-            Error::Error_1106_MissingRequiredToken( funcStartIter, this, ".CompilerOptions", "%1" );
-            return false;
-        }
-        bool hasOutputToken = ( args.Find( "%2" ) || args.Find( "\"%2\"" ) );
-        if ( hasOutputToken == false )
-        {
-            Error::Error_1106_MissingRequiredToken( funcStartIter, this, ".CompilerOptions", "%2" );
-            return false;
-        }
+  if (staticDeps.IsEmpty()) {
+    Error::Error_1006_NothingToBuild(funcStartIter, this);
+    return false;
+  }
 
-        // check /c or -c
-        if ( objFlags & ObjectNode::FLAG_MSVC )
-        {
-            if ( args.Find( "/c" ) == nullptr &&
-                    args.Find( "-c" ) == nullptr)
-            {
-                Error::Error_1106_MissingRequiredToken( funcStartIter, this, ".CompilerOptions", "/c or -c" );
-                return false;
-            }
-        }
-        else if ( objFlags & ( ObjectNode::FLAG_SNC | ObjectNode::FLAG_GCC | ObjectNode::FLAG_CLANG ) )
-        {
-            if ( args.Find( "-c" ) == nullptr )
-            {
-                Error::Error_1106_MissingRequiredToken( funcStartIter, this, ".CompilerOptions", "-c" );
-                return false;
-            }
-        }
-    }
+  // parsing logic should guarantee we have a string for our name
+  ASSERT(m_AliasForFunction.IsEmpty() == false);
 
-    // Get the (optional) Preprocessor & PreprocessorOptions
-    const BFFVariable * preprocessor = nullptr;
-    const BFFVariable * preprocessorOptions = nullptr;
-    CompilerNode * preprocessorNode = nullptr;
-    if ( !GetString( funcStartIter, preprocessor, ".Preprocessor", false ) )
-    {
-        return false; // GetString will have emitted an error
-    }
-    if ( preprocessor )
-    {
-        // get the preprocessor executable
-        if ( !FunctionObjectList::GetCompilerNode( funcStartIter, preprocessor->GetString(), preprocessorNode ) )
-        {
-            return false; // GetCompilerNode will have emitted an error
-        }
+  // Check for existing node
+  if (ng.FindNode(m_AliasForFunction)) {
+    Error::Error_1100_AlreadyDefined(funcStartIter, this, m_AliasForFunction);
+    return false;
+  }
 
-        // get the command line args for the preprocessor
-        if ( !GetString( funcStartIter, preprocessorOptions, ".PreprocessorOptions", true ) ) // required
-        {
-            return false; // GetString will have emitted an error
-        }
-    }
+  // Create library node which depends on the single file or list
+  ObjectListNode *o = ng.CreateObjectListNode(
+      m_AliasForFunction, staticDeps, compilerNode,
+      compilerOptions->GetString(), compilerOptionsDeoptimized,
+      compilerOutputPath, precompiledHeaderNode, compilerForceUsing,
+      preBuildDependencies, deoptimizeWritableFiles,
+      deoptimizeWritableFilesWithToken, allowDistribution, allowCaching,
+      preprocessorNode,
+      preprocessorOptions ? preprocessorOptions->GetString()
+                          : AString::GetEmpty());
+  if (compilerOutputExtension) {
+    o->m_ObjExtensionOverride = compilerOutputExtension->GetString();
+  }
 
-    // Pre-build dependencies
-    Dependencies preBuildDependencies;
-    if ( !GetNodeList( funcStartIter, ".PreBuildDependencies", preBuildDependencies, false ) )
-    {
-        return false; // GetNodeList will have emitted an error
-    }
+  // @KS: Added Object FileName Override
+  if (compilerObjectNameOverride) {
+    o->m_ObjNameOverride = compilerObjectNameOverride->GetString();
+  }
+  o->m_CompilerOutputPrefix = compilerOutputPrefix;
 
-    Dependencies staticDeps( 32, true );
-    if ( !GetInputs( funcStartIter, staticDeps ) )
-    {
-        return false; // GetStaticDeps will gave emitted error
-    }
-
-    if ( staticDeps.IsEmpty() )
-    {
-        Error::Error_1006_NothingToBuild( funcStartIter, this );
-        return false;
-    }
-
-    // parsing logic should guarantee we have a string for our name
-    ASSERT( m_AliasForFunction.IsEmpty() == false );
-
-    // Check for existing node
-    if ( ng.FindNode( m_AliasForFunction ) )
-    {
-        Error::Error_1100_AlreadyDefined( funcStartIter, this, m_AliasForFunction );
-        return false;
-    }
-
-    // Create library node which depends on the single file or list
-    ObjectListNode * o = ng.CreateObjectListNode( m_AliasForFunction,
-                         staticDeps,
-                         compilerNode,
-                         compilerOptions->GetString(),
-                         compilerOptionsDeoptimized,
-                         compilerOutputPath,
-                         precompiledHeaderNode,
-                         compilerForceUsing,
-                         preBuildDependencies,
-                         deoptimizeWritableFiles,
-                         deoptimizeWritableFilesWithToken,
-                         allowDistribution,
-                         allowCaching,
-                         preprocessorNode,
-                         preprocessorOptions ? preprocessorOptions->GetString() : AString::GetEmpty() );
-    if ( compilerOutputExtension )
-    {
-        o->m_ObjExtensionOverride = compilerOutputExtension->GetString();
-    }
-
-    // @KS: Added Object FileName Override
-    if ( compilerObjectNameOverride )
-    {
-        o->m_ObjNameOverride = compilerObjectNameOverride->GetString();
-    }
-    o->m_CompilerOutputPrefix = compilerOutputPrefix;
-
-    return true;
+  return true;
 }
 
 // GetCompilerNode
 //------------------------------------------------------------------------------
-bool FunctionObjectList::GetCompilerNode( const BFFIterator & iter, const AString & compiler, CompilerNode * & compilerNode ) const
-{
-    NodeGraph & ng = FBuild::Get().GetDependencyGraph();
-    Node * cn = ng.FindNode( compiler );
-    compilerNode = nullptr;
-    if ( cn != nullptr )
-    {
-        if ( cn->GetType() == Node::ALIAS_NODE )
-        {
-            AliasNode * an = cn->CastTo< AliasNode >();
-            cn = an->GetAliasedNodes()[ 0 ].GetNode();
-        }
-        if ( cn->GetType() != Node::COMPILER_NODE )
-        {
-            Error::Error_1102_UnexpectedType( iter, this, "Compiler", cn->GetName(), cn->GetType(), Node::COMPILER_NODE );
-            return false;
-        }
-        compilerNode = cn->CastTo< CompilerNode >();
+bool FunctionObjectList::GetCompilerNode(const BFFIterator &iter,
+                                         const AString &compiler,
+                                         CompilerNode *&compilerNode) const {
+  NodeGraph &ng = FBuild::Get().GetDependencyGraph();
+  Node *cn = ng.FindNode(compiler);
+  compilerNode = nullptr;
+  if (cn != nullptr) {
+    if (cn->GetType() == Node::ALIAS_NODE) {
+      AliasNode *an = cn->CastTo<AliasNode>();
+      cn = an->GetAliasedNodes()[0].GetNode();
     }
-    else
-    {
-        // create a compiler node - don't allow distribution
-        // (only explicitly defined compiler nodes can be distributed)
-        AStackString<> compilerClean;
-        NodeGraph::CleanPath( compiler, compilerClean );
-        compilerNode = ng.CreateCompilerNode( compilerClean );
-        VERIFY( compilerNode->GetReflectionInfoV()->SetProperty( compilerNode, "AllowDistribution", false ) );
+    if (cn->GetType() != Node::COMPILER_NODE) {
+      Error::Error_1102_UnexpectedType(iter, this, "Compiler", cn->GetName(),
+                                       cn->GetType(), Node::COMPILER_NODE);
+      return false;
     }
+    compilerNode = cn->CastTo<CompilerNode>();
+  } else {
+    // create a compiler node - don't allow distribution
+    // (only explicitly defined compiler nodes can be distributed)
+    AStackString<> compilerClean;
+    NodeGraph::CleanPath(compiler, compilerClean);
+    compilerNode = ng.CreateCompilerNode(compilerClean);
+    VERIFY(compilerNode->GetReflectionInfoV()->SetProperty(
+        compilerNode, "AllowDistribution", false));
+  }
 
-    return true;
+  return true;
 }
 
 // GetPrecompiledHeaderNode
 //------------------------------------------------------------------------------
-bool FunctionObjectList::GetPrecompiledHeaderNode( const BFFIterator & iter,
-        CompilerNode * compilerNode,
-        const BFFVariable * compilerOptions,
-        const Dependencies & compilerForceUsing,
-        ObjectNode * & precompiledHeaderNode,
-        bool deoptimizeWritableFiles,
-        bool deoptimizeWritableFilesWithToken,
-        bool allowDistribution,
-        bool allowCaching ) const
-{
-    const BFFVariable * pchInputFile = nullptr;
-    const BFFVariable * pchOutputFile = nullptr;
-    const BFFVariable * pchOptions = nullptr;
-    const BFFVariable * pchObjFileNameOverride = nullptr; 	// @KS: Added Object FileName Override
-    if ( !GetString( iter, pchInputFile, ".PCHInputFile" ) ||
-            !GetString( iter, pchOutputFile, ".PCHOutputFile" ) ||
-            !GetString( iter, pchObjFileNameOverride, ".PCHObjectNameOverride" ) ||
-            !GetString( iter, pchOptions, ".PCHOptions" ) )
-    {
+bool FunctionObjectList::GetPrecompiledHeaderNode(
+    const BFFIterator &iter, CompilerNode *compilerNode,
+    const BFFVariable *compilerOptions, const Dependencies &compilerForceUsing,
+    ObjectNode *&precompiledHeaderNode, bool deoptimizeWritableFiles,
+    bool deoptimizeWritableFilesWithToken, bool allowDistribution,
+    bool allowCaching) const {
+  const BFFVariable *pchInputFile = nullptr;
+  const BFFVariable *pchOutputFile = nullptr;
+  const BFFVariable *pchOptions = nullptr;
+  const BFFVariable *pchObjFileNameOverride =
+      nullptr; // @KS: Added Object FileName Override
+  if (!GetString(iter, pchInputFile, ".PCHInputFile") ||
+      !GetString(iter, pchOutputFile, ".PCHOutputFile") ||
+      !GetString(iter, pchObjFileNameOverride, ".PCHObjectNameOverride") ||
+      !GetString(iter, pchOptions, ".PCHOptions")) {
+    return false;
+  }
+
+  precompiledHeaderNode = nullptr;
+
+  if (pchInputFile) {
+    if (!pchOutputFile || !pchOptions) {
+      Error::Error_1300_MissingPCHArgs(iter, this);
+      return false;
+    }
+
+    AStackString<> pchOptionsDeoptimized;
+    if (!GetString(
+            iter, pchOptionsDeoptimized, ".PCHOptionsDeoptimized",
+            (deoptimizeWritableFiles || deoptimizeWritableFilesWithToken))) {
+      return false;
+    }
+
+    NodeGraph &ng = FBuild::Get().GetDependencyGraph();
+    Node *pchInputNode = ng.FindNode(pchInputFile->GetString());
+    if (pchInputNode) {
+      // is it a file?
+      if (pchInputNode->IsAFile() == false) {
+        Error::Error_1103_NotAFile(iter, this, "PCHInputFile",
+                                   pchInputNode->GetName(),
+                                   pchInputNode->GetType());
         return false;
+      }
+    } else {
+      // Create input node
+      pchInputNode = ng.CreateFileNode(pchInputFile->GetString());
     }
 
-    precompiledHeaderNode = nullptr;
-
-    if ( pchInputFile )
-    {
-        if ( !pchOutputFile || !pchOptions )
-        {
-            Error::Error_1300_MissingPCHArgs( iter, this );
-            return false;
-        }
-
-        AStackString<> pchOptionsDeoptimized;
-        if ( !GetString( iter, pchOptionsDeoptimized, ".PCHOptionsDeoptimized", ( deoptimizeWritableFiles || deoptimizeWritableFilesWithToken ) ) )
-        {
-            return false;
-        }
-
-        NodeGraph & ng = FBuild::Get().GetDependencyGraph();
-        Node * pchInputNode = ng.FindNode( pchInputFile->GetString() );
-        if ( pchInputNode )
-        {
-            // is it a file?
-            if ( pchInputNode->IsAFile() == false )
-            {
-                Error::Error_1103_NotAFile( iter, this, "PCHInputFile", pchInputNode->GetName(), pchInputNode->GetType() );
-                return false;
-            }
-        }
-        else
-        {
-            // Create input node
-            pchInputNode = ng.CreateFileNode( pchInputFile->GetString() );
-        }
-
-        if ( ng.FindNode( pchOutputFile->GetString() ) )
-        {
-            Error::Error_1301_AlreadyDefinedPCH( iter, this, pchOutputFile->GetString().Get() );
-            return false;
-        }
-
-        uint32_t pchFlags = ObjectNode::DetermineFlags( compilerNode, pchOptions->GetString(), true, false );
-        if ( pchFlags & ObjectNode::FLAG_MSVC )
-        {
-            // sanity check arguments
-
-            // PCH must have "Create PCH" (e.g. /Yc"PrecompiledHeader.h")
-            if ( pchOptions->GetString().Find( "/Yc" ) == nullptr )
-            {
-                Error::Error_1302_MissingPCHCompilerOption( iter, this, "/Yc", "PCHOptions" );
-                return false;
-            }
-            // PCH must have "Precompiled Header to Use" (e.g. /Fp"PrecompiledHeader.pch")
-            if ( pchOptions->GetString().Find( "/Fp" ) == nullptr )
-            {
-                Error::Error_1302_MissingPCHCompilerOption( iter, this, "/Fp", "PCHOptions" );
-                return false;
-            }
-            // PCH must have object output option (e.g. /Fo"PrecompiledHeader.obj")
-            if ( pchOptions->GetString().Find( "/Fo" ) == nullptr )
-            {
-                Error::Error_1302_MissingPCHCompilerOption( iter, this, "/Fo", "PCHOptions" );
-                return false;
-            }
-
-            // Object using the PCH must have "Use PCH" option (e.g. /Yu"PrecompiledHeader.h")
-            if ( compilerOptions->GetString().Find( "/Yu" ) == nullptr )
-            {
-                Error::Error_1302_MissingPCHCompilerOption( iter, this, "/Yu", "CompilerOptions" );
-                return false;
-            }
-            // Object using the PCH must have "Precompiled header to use" (e.g. /Fp"PrecompiledHeader.pch")
-            if ( compilerOptions->GetString().Find( "/Fp" ) == nullptr )
-            {
-                Error::Error_1302_MissingPCHCompilerOption( iter, this, "/Fp", "CompilerOptions" );
-                return false;
-            }
-        }
-
-        // TODO:B Check PCHOptionsDeoptimized
-
-        precompiledHeaderNode = ng.CreateObjectNode( pchOutputFile->GetString(),
-                                pchInputNode,
-                                compilerNode,
-                                pchOptions->GetString(),
-                                pchOptionsDeoptimized,
-                                nullptr,
-                                pchFlags,
-                                compilerForceUsing,
-                                deoptimizeWritableFiles,
-                                deoptimizeWritableFilesWithToken,
-                                allowDistribution,
-                                allowCaching,
-                                nullptr, AString::GetEmpty(), 0 ); // preprocessor args not supported
-
-        // @KS: Added Object FileName Override
-        if (pchObjFileNameOverride)
-        {
-            precompiledHeaderNode->SetObjNameOverride(pchObjFileNameOverride->GetString());
-        }
+    if (ng.FindNode(pchOutputFile->GetString())) {
+      Error::Error_1301_AlreadyDefinedPCH(iter, this,
+                                          pchOutputFile->GetString().Get());
+      return false;
     }
 
-    return true;
+    uint32_t pchFlags = ObjectNode::DetermineFlags(
+        compilerNode, pchOptions->GetString(), true, false);
+    if (pchFlags & ObjectNode::FLAG_MSVC) {
+      // sanity check arguments
+
+      // PCH must have "Create PCH" (e.g. /Yc"PrecompiledHeader.h")
+      if (pchOptions->GetString().Find("/Yc") == nullptr) {
+        Error::Error_1302_MissingPCHCompilerOption(iter, this, "/Yc",
+                                                   "PCHOptions");
+        return false;
+      }
+      // PCH must have "Precompiled Header to Use" (e.g.
+      // /Fp"PrecompiledHeader.pch")
+      if (pchOptions->GetString().Find("/Fp") == nullptr) {
+        Error::Error_1302_MissingPCHCompilerOption(iter, this, "/Fp",
+                                                   "PCHOptions");
+        return false;
+      }
+      // PCH must have object output option (e.g. /Fo"PrecompiledHeader.obj")
+      if (pchOptions->GetString().Find("/Fo") == nullptr) {
+        Error::Error_1302_MissingPCHCompilerOption(iter, this, "/Fo",
+                                                   "PCHOptions");
+        return false;
+      }
+
+      // Object using the PCH must have "Use PCH" option (e.g.
+      // /Yu"PrecompiledHeader.h")
+      if (compilerOptions->GetString().Find("/Yu") == nullptr) {
+        Error::Error_1302_MissingPCHCompilerOption(iter, this, "/Yu",
+                                                   "CompilerOptions");
+        return false;
+      }
+      // Object using the PCH must have "Precompiled header to use" (e.g.
+      // /Fp"PrecompiledHeader.pch")
+      if (compilerOptions->GetString().Find("/Fp") == nullptr) {
+        Error::Error_1302_MissingPCHCompilerOption(iter, this, "/Fp",
+                                                   "CompilerOptions");
+        return false;
+      }
+    }
+
+    // TODO:B Check PCHOptionsDeoptimized
+
+    precompiledHeaderNode = ng.CreateObjectNode(
+        pchOutputFile->GetString(), pchInputNode, compilerNode,
+        pchOptions->GetString(), pchOptionsDeoptimized, nullptr, pchFlags,
+        compilerForceUsing, deoptimizeWritableFiles,
+        deoptimizeWritableFilesWithToken, allowDistribution, allowCaching,
+        nullptr, AString::GetEmpty(), 0); // preprocessor args not supported
+
+    // @KS: Added Object FileName Override
+    if (pchObjFileNameOverride) {
+      precompiledHeaderNode->SetObjNameOverride(
+          pchObjFileNameOverride->GetString());
+    }
+  }
+
+  return true;
 }
 
 // GetInputs
 //------------------------------------------------------------------------------
-bool FunctionObjectList::GetInputs( const BFFIterator & iter, Dependencies & inputs ) const
-{
-    NodeGraph & ng = FBuild::Get().GetDependencyGraph();
+bool FunctionObjectList::GetInputs(const BFFIterator &iter,
+                                   Dependencies &inputs) const {
+  NodeGraph &ng = FBuild::Get().GetDependencyGraph();
 
-    // do we want to build files via a unity blob?
-    Array< AString > inputUnities;
-    if ( !GetStrings( iter, inputUnities, ".CompilerInputUnity", false ) ) // not required
-    {
-        return false;
+  // do we want to build files via a unity blob?
+  Array<AString> inputUnities;
+  if (!GetStrings(iter, inputUnities, ".CompilerInputUnity",
+                  false)) // not required
+  {
+    return false;
+  }
+  for (const auto &unity : inputUnities) {
+    Node *n = ng.FindNode(unity);
+    if (n == nullptr) {
+      Error::Error_1104_TargetNotDefined(iter, this, "CompilerInputUnity",
+                                         unity);
+      return false;
     }
-    for ( const auto& unity : inputUnities )
-    {
-        Node * n = ng.FindNode( unity );
-        if ( n == nullptr )
-        {
-            Error::Error_1104_TargetNotDefined( iter, this, "CompilerInputUnity", unity );
-            return false;
-        }
-        if ( n->GetType() != Node::UNITY_NODE )
-        {
-            Error::Error_1102_UnexpectedType( iter, this, "CompilerInputUnity", unity, n->GetType(), Node::UNITY_NODE );
-            return false;
-        }
-        inputs.Append( Dependency( n ) );
+    if (n->GetType() != Node::UNITY_NODE) {
+      Error::Error_1102_UnexpectedType(iter, this, "CompilerInputUnity", unity,
+                                       n->GetType(), Node::UNITY_NODE);
+      return false;
     }
+    inputs.Append(Dependency(n));
+  }
 
-    // do we want to build a files in a directory?
-    const BFFVariable * inputPath = BFFStackFrame::GetVar( ".CompilerInputPath" );
-    if ( inputPath )
-    {
-        // get the optional pattern and recurse options related to InputPath
-        Array< AString > patterns;
-        if ( !GetStrings( iter, patterns, ".CompilerInputPattern", false ) )
-        {
-            return false; // GetString will have emitted an error
-        }
-        if ( patterns.IsEmpty() )
-        {
-            patterns.Append( AStackString<>( "*.cpp" ) );
-        }
-
-        // recursive?  default to true
-        bool recurse = true;
-        if ( !GetBool( iter, recurse, ".CompilerInputPathRecurse", true, false ) )
-        {
-            return false; // GetBool will have emitted an error
-        }
-
-        // Support an exclusion path
-        Array< AString > excludePaths;
-        if ( !GetFolderPaths( iter, excludePaths, ".CompilerInputExcludePath", false ) )
-        {
-            return false; // GetFolderPaths will have emitted an error
-        }
-
-        Array< AString > filesToExclude;
-        if ( !GetStrings( iter, filesToExclude, ".CompilerInputExcludedFiles", false ) ) // not required
-        {
-            return false; // GetStrings will have emitted an error
-        }
-        CleanFileNames( filesToExclude );
-
-        // Input paths
-        Array< AString > inputPaths;
-        if ( !GetFolderPaths( iter, inputPaths, ".CompilerInputPath", false ) )
-        {
-            return false; // GetFolderPaths will have emitted an error
-        }
-
-        Dependencies dirNodes( inputPaths.GetSize() );
-        if ( !GetDirectoryListNodeList( iter, inputPaths, excludePaths, filesToExclude, recurse, &patterns, "CompilerInputPath", dirNodes ) )
-        {
-            return false; // GetDirectoryListNodeList will have emitted an error
-        }
-        inputs.Append( dirNodes );
+  // do we want to build a files in a directory?
+  const BFFVariable *inputPath = BFFStackFrame::GetVar(".CompilerInputPath");
+  if (inputPath) {
+    // get the optional pattern and recurse options related to InputPath
+    Array<AString> patterns;
+    if (!GetStrings(iter, patterns, ".CompilerInputPattern", false)) {
+      return false; // GetString will have emitted an error
+    }
+    if (patterns.IsEmpty()) {
+      patterns.Append(AStackString<>("*.cpp"));
     }
 
-    // do we want to build a specific list of files?
-    if ( !GetNodeList( iter, ".CompilerInputFiles", inputs, false ) )
-    {
-        // helper will emit error
-        return false;
+    // recursive?  default to true
+    bool recurse = true;
+    if (!GetBool(iter, recurse, ".CompilerInputPathRecurse", true, false)) {
+      return false; // GetBool will have emitted an error
     }
 
-    return true;
+    // Support an exclusion path
+    Array<AString> excludePaths;
+    if (!GetFolderPaths(iter, excludePaths, ".CompilerInputExcludePath",
+                        false)) {
+      return false; // GetFolderPaths will have emitted an error
+    }
+
+    Array<AString> filesToExclude;
+    if (!GetStrings(iter, filesToExclude, ".CompilerInputExcludedFiles",
+                    false)) // not required
+    {
+      return false; // GetStrings will have emitted an error
+    }
+    CleanFileNames(filesToExclude);
+
+    // Input paths
+    Array<AString> inputPaths;
+    if (!GetFolderPaths(iter, inputPaths, ".CompilerInputPath", false)) {
+      return false; // GetFolderPaths will have emitted an error
+    }
+
+    Dependencies dirNodes(inputPaths.GetSize());
+    if (!GetDirectoryListNodeList(iter, inputPaths, excludePaths,
+                                  filesToExclude, recurse, &patterns,
+                                  "CompilerInputPath", dirNodes)) {
+      return false; // GetDirectoryListNodeList will have emitted an error
+    }
+    inputs.Append(dirNodes);
+  }
+
+  // do we want to build a specific list of files?
+  if (!GetNodeList(iter, ".CompilerInputFiles", inputs, false)) {
+    // helper will emit error
+    return false;
+  }
+
+  return true;
 }
 
 //------------------------------------------------------------------------------
